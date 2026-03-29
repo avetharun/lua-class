@@ -5,7 +5,10 @@
 - Add private/protected/public keys via closures and _ENV variable
 - Encapsulate imports and namespaces via _ENV variable
 - Try to declare namespace globally for a file instead of namespace block
-
+## [3.2.0](../../compare/3.1.0...3.2.0) - 2026-03-28
+### Added
+- `self:get_type()` method to get additional information about the current type
+- `self:get_type_name()` method to return the current instance's classname
 ## [3.1.0](../../compare/3.0.3...3.1.0) - 2021-06-22
 ### Added
 - `import` function
