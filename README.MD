@@ -336,8 +336,8 @@ There is also special Class API. This package defines own class `Class` which ca
 When instantiated, classes will have two additional fields set:
 |Method|Description|
 |---|---|
-|self:get_type()`|Returns a table representing the type information of this class. **Seperate from the Type API.**|
-|self:get_type_name()`|Returns the name defined when the class is created (ie, class "SomeName" -> self:get_type_name() == "SomeName")|
+|`self:get_type()`|Returns a table representing the type information of this class. **Seperate from the Type API.**|
+|`self:get_type_name()`|Returns the name defined when the class is created (ie, class "SomeName" -> self:get_type_name() == "SomeName")|
 
 ## Testing
 To run tests, call from terminal `.\test.bat` for Windows and `./test.sh` for Linux
