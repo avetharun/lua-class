@@ -332,6 +332,13 @@ There is also special Class API. This package defines own class `Class` which ca
 |`Class(<type>):getName()`|Returns full type name including namespaces delimited by dot|
 |`Class(<type>):delete()`|Completely deletes type|
 
+### Object Instance API
+When instantiated, classes will have two additional fields set:
+|Method|Description|
+|---|---|
+|self:get_type()`|Returns a table representing the type information of this class. **Seperate from the Type API.**|
+|self:get_type_name()`|Returns the name defined when the class is created (ie, class "SomeName" -> self:get_type_name() == "SomeName")|
+
 ## Testing
 To run tests, call from terminal `.\test.bat` for Windows and `./test.sh` for Linux
 You can pass an argument to tests to define memory test iterations count like this - `test 1024`
