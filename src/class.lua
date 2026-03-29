@@ -94,7 +94,7 @@ local function concat_sentence_list(...)
 end
 
 local function check_type_name(entityType, name)
-	local regex = "^%a%w*$"
+	local regex = "^[%a_][%w_]*$"
 	switch (entityType) {
 		[Type.CLASS] = function ()
 			if not name:match(regex) then
@@ -211,7 +211,7 @@ local function type_constructor(self, ...)
 			__index = self,
 			__newindex = self["[]"] or self.__newindex,
 			__call = self["()"] or self.__call,
-			__tostring = self.__tostring,
+			__tostring = self.__tostring or function (_) return self.__meta.name .. "()" end,
 			__concat = self[".."] or self.__concat,
 			__metatable = self.__metatable,
 			__mode = self.__mode,
@@ -239,12 +239,26 @@ local function type_constructor(self, ...)
 	end
 	local object = setmetatable({}, self.__meta.__proto)
 	if self.constructor then
-		self.constructor(object, table.unpack({...}))
+		self.constructor(object, unpack({...}))
 	end
 	object.__meta = {
 		type = Type.INSTANCE,
-		class = self
+		class = self,
+		realtype = {
+			name = self.__meta.name,
+		}
 	}
+	-- Set base to the first non-Object parent
+	if self.__meta.parents then
+		for name, parent in pairs(self.__meta.parents) do
+			if name ~= "Object" then
+				object.base = parent
+				break
+			end
+		end
+	end
+	object.get_type = function (self1) return self1.__meta.realtype end
+	object.get_type_name = function (self1) return self1.__meta.realtype.name end
 	return object
 end
 
@@ -253,9 +267,11 @@ local function type_descriptor_handler(descriptor)
 	__meta.lastTypeDescriptor = descriptor
 	check_type_field_absence(meta.type, meta.name, descriptor, "__meta")
 	check_type_field_absence(meta.type, meta.name, descriptor, "__index")
+	check_type_field_absence(meta.type, meta.name, descriptor, "get_type")
+	check_type_field_absence(meta.type, meta.name, descriptor, "get_type_name")
 	setmetatable(descriptor, {
 		__index = __meta.lastType;
-		__call = type_constructor
+		__call = type_constructor;
 	})
 	__meta.lastTypeDescriptor = nil
 	for parentName, parent in pairs(__meta.lastType.__meta.parents) do
@@ -420,6 +436,7 @@ function class(name)
 	})
 	__meta.ns[name] = ref
 	__meta.lastType = ref
+	__meta.name = name
 	return type_descriptor_handler
 end
 
