@@ -148,7 +148,7 @@ It is pretty common to represent namespaces as filesystem directories and classe
 import "system.io.File" -- Import single class located in system/io/File.lua
 import "system.draw.*" -- Import all classes located in system/draw
 ```
-Pretty reminds of java, does not it?
+Pretty reminiscent of java, does not it?
 When you use import statement, it looks for files in `src` directory first. So if you import class like "system.File" and your current directory looks like this:
 ```
 project
