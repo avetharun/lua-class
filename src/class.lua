@@ -69,6 +69,7 @@ end
 local function delete_last_type()
 	Type.delete(__meta.lastType)
 	__meta.lastType = nil
+	__meta.lastTypeStatic = nil
 end
 
 local function get_type_name_from_enum(value)
@@ -204,12 +205,69 @@ local function resolve_type_extend_list(entityType, name, extendList)
 	end
 	return parentList
 end
-
+local _c = {}
+local function populate_supers(self, origin, supers, ...)
+	local current_super_instance = {}
+	local current_parent = {}
+	for name, parent in pairs(self.__meta.parents) do
+		if name ~= "Object" and name ~= origin.__meta.name then
+			current_parent = parent
+			current_super_instance = Type.find(name)
+			-- print(origin.__meta.name .. " -> "..name)
+			-- local _real = _c.type_constructor(current_super_instance, unpack({...}));''
+			supers[name] = current_super_instance
+			if current_parent.__meta.parents then
+				populate_supers(parent, origin, supers)
+			end
+		end
+	end
+	return supers
+end
 local function type_constructor(self, ...)
 	if not self.__meta.__proto then
+		local _newindex_f=self["[]"] or self.__newindex
 		self.__meta.__proto = {
-			__index = self,
-			__newindex = self["[]"] or self.__newindex,
+			__index = function(table, key)
+				if self.__meta.getsets and self.__meta.getsets[key] and self.__meta.getsets[key].getter then
+					if not table.__meta.__settingStack then
+						table.__meta.__settingStack = {}
+					end
+					if table.__meta.__settingStack[key] then
+						return rawget(table, key)
+					end
+					-- Push the key onto the stack
+					table.__meta.__settingStack[key] = true
+					local result = self.__meta.getsets[key].getter(table)
+					table.__meta.__settingStack[key] = nil
+					return result
+				end
+				return self
+			end,
+			__newindex = function(table, key, value)
+				if self.__meta.getsets and self.__meta.getsets[key] and self.__meta.getsets[key].setter then
+					-- Check if we're already in a setter for this key (prevent recursion)
+					if not table.__meta.__settingStack then
+						table.__meta.__settingStack = {}
+					end
+					if table.__meta.__settingStack[key] then
+						-- Direct assignment without calling setter to prevent recursion
+						rawset(table, key, value)
+						return
+					end
+					-- Push the key onto the stack
+					table.__meta.__settingStack[key] = true
+					-- Call the setter
+					self.__meta.getsets[key].setter(table, value)
+					-- Pop the key from the stack
+					table.__meta.__settingStack[key] = nil
+					return
+				end
+				if Class.getset_readonly_error and self.__meta.getsets and self.__meta.getsets[key] and self.__meta.getsets[key].getter then
+					error("Getset is readonly for key " .. key.. "!")
+					return nil
+				end
+				return _newindex_f
+			end,
 			__call = self["()"] or self.__call,
 			__tostring = self.__tostring or function (_) return self.__meta.name .. "()" end,
 			__concat = self[".."] or self.__concat,
@@ -238,6 +296,17 @@ local function type_constructor(self, ...)
 		}
 	end
 	local object = setmetatable({}, self.__meta.__proto)
+	
+	object.__meta.supers = {}
+	if self["@nosuper"] == nil or self["@nosuper"] == false and (self.__meta.name ~= "Object" and  self.__meta.name ~= "Class" )then
+		-- Setup super constructors
+		local _current_super_instance = {}
+		local _current_parent = {}
+		if self.__meta.parents then
+			object.__meta.supers = populate_supers(self, self, object.__meta.supers, unpack({...}))
+		end
+	end
+
 	if self.constructor then
 		self.constructor(object, unpack({...}))
 	end
@@ -246,23 +315,71 @@ local function type_constructor(self, ...)
 		class = self,
 		realtype = {
 			name = self.__meta.name,
+			parents = self.__meta.parents or {},
+			children = nil, -- TODO: add support for children in typeinfo
 		}
 	}
-	-- Set base to the first non-Object parent
-	if self.__meta.parents then
-		for name, parent in pairs(self.__meta.parents) do
-			if name ~= "Object" then
-				object.base = parent
-				break
-			end
-		end
-	end
 	object.get_type = function (self1) return self1.__meta.realtype end
 	object.get_type_name = function (self1) return self1.__meta.realtype.name end
 	return object
 end
+_c.type_constructor = type_constructor
+
+function _G.static(descriptor)
+	if not __meta.lastType then
+		error "Static block can only be used inside a class declaration"
+	end
+	if type(descriptor) ~= "table" then
+		delete_last_type()
+		error(concat_sentence_list(get_declaration_message_error(__meta.lastType.__meta.type, __meta.lastType.__meta.name), "Static block must be a table"))
+	end
+	if not __meta.lastTypeStatic then
+		__meta.lastTypeStatic = {}
+	end
+	for k, v in pairs(descriptor) do
+		if type(k) == "string" then
+			if __meta.lastTypeStatic[k] ~= nil then
+				delete_last_type()
+				error(concat_sentence_list(get_declaration_message_error(__meta.lastType.__meta.type, __meta.lastType.__meta.name), "Duplicate static field \""..k.."\""))
+			end
+			__meta.lastTypeStatic[k] = v
+		end
+	end
+	return nil
+end
+
+local function process_type_static_block(descriptor)
+	if __meta.lastTypeStatic then
+		for k, v in pairs(__meta.lastTypeStatic) do
+			if descriptor[k] ~= nil then
+				delete_last_type()
+				error(concat_sentence_list(get_declaration_message_error(__meta.lastType.__meta.type, __meta.lastType.__meta.name), "Static block contains duplicate field \""..k.."\""))
+			end
+			descriptor[k] = v
+		end
+		__meta.lastTypeStatic = nil
+	end
+	if descriptor.static == nil then
+		return
+	end
+	if type(descriptor.static) ~= "table" then
+		delete_last_type()
+		error(concat_sentence_list(get_declaration_message_error(__meta.lastType.__meta.type, __meta.lastType.__meta.name), "Static block must be a table"))
+	end
+	for k, v in pairs(descriptor.static) do
+		if type(k) == "string" then
+			if descriptor[k] ~= nil then
+				delete_last_type()
+				error(concat_sentence_list(get_declaration_message_error(__meta.lastType.__meta.type, __meta.lastType.__meta.name), "Static block contains duplicate field \""..k.."\""))
+			end
+			descriptor[k] = v
+		end
+	end
+	descriptor.static = nil
+end
 
 local function type_descriptor_handler(descriptor)
+	process_type_static_block(descriptor)
 	local meta = __meta.lastType.__meta
 	__meta.lastTypeDescriptor = descriptor
 	check_type_field_absence(meta.type, meta.name, descriptor, "__meta")
@@ -279,6 +396,8 @@ local function type_descriptor_handler(descriptor)
 	end
 	__meta.ns[meta.name] = descriptor
 	__meta.lastType = nil
+	-- C++ ClassDB registration
+	if classdb_synthetic_added then classdb_synthetic_added(meta.name, descriptor) end
 end
 
 local function type_index(self, key)
@@ -337,6 +456,7 @@ Type = {
 			end
 		end
 		_G[typeName] = nil
+		if classdb_synthetic_erased then classdb_synthetic_erased(typeName) end
 	end;
 
 	--- Sets base search path for imports
@@ -356,7 +476,7 @@ Type = {
 		package.path = path..directorySeparator..pathSub..".lua"..pathDelimiter..package.path
 	end;
 }
-
+--- @class ClassObject
 Object = {
 
 	__meta = {
@@ -413,9 +533,37 @@ Object = {
 	getClass = function (self)
 		return self.__meta.class
 	end;
+	super = function(self, classname)
+		local _super = (self.__meta.supers or {})[classname] or nil
+		assert(_super ~= nil, "Supercall must contain a valid class that this object extends from. " .. classname .. " is not a superclass of ")
+		return _super
+	end;
 }
+---Get the classname of an object. Identical to self:get_type_name()
+---@param instance ClassObject
+---@return string
+function _G.typename(instance)
+	assert(instance.__meta ~= nil, "typeinfo() must be used with a constructed class object!")
+	if instance.__meta then
+		return instance.__meta.name
+	end
+	return ""
+end
 
-function class(name)
+---Get the realtype info from the object. Identical to self:get_type()
+---@param instance ClassObject
+---@return table
+function _G.typeinfo(instance)
+	assert(instance.__meta ~= nil, "typeinfo() must be used with a constructed class object!")
+	if instance.__meta then
+		return instance.__meta.realtype
+	end
+	return {}
+end
+function _G.isclass(instance)
+	return instance.__meta ~= nil
+end
+function _G.class(name)
 	check_type_name(Type.CLASS, name)
 	check_type_absence(Type.CLASS, name)
 	local ns = __meta.ns
@@ -439,8 +587,26 @@ function class(name)
 	__meta.name = name
 	return type_descriptor_handler
 end
-
-function extends(...)
+function _G.getset(name, getter, setter)
+	local meta = __meta.lastType.__meta
+	meta.getsets = meta.getsets or {}
+	
+	if type(name) == "table" and getter == nil and setter == nil then
+		-- Table-based format: getset { ["key"] = { getter = ..., setter = ... } }
+		for key, descriptor in pairs(name) do
+			if type(descriptor) == "table" then
+				meta.getsets[key] = descriptor
+			end
+		end
+	else
+		-- Function-based format: getset(name, getter, setter)
+		meta.getsets[name] = {}
+		meta.getsets[name].getter = getter
+		meta.getsets[name].setter = setter
+	end
+	return type_descriptor_handler
+end
+function _G.extends(...)
 	local parents = {}
 	local extendList = resolve_type_extend_list(Type.CLASS, __meta.lastType.__meta.name, {...})
 	check_type_extend_list(Type.CLASS, __meta.lastType.__meta.name, extendList)
@@ -457,7 +623,7 @@ function extends(...)
 	return type_descriptor_handler
 end
 
-function namespace(name)
+function _G.namespace(name)
 	check_type_name(Type.NAMESPACE, name)
 	check_ns_can_create(name)
 	check_ns_nesting(name)
@@ -492,7 +658,7 @@ function namespace(name)
 	end
 end
 
-function import(name)
+function _G.import(name)
 	if name:sub(#name, #name) == "*" then
 		local parts = string_split(name, ".")
 		parts[#parts] = nil
@@ -513,7 +679,7 @@ function import(name)
 	end
 end
 
-function switch(variable)
+function _G.switch(variable)
 	return function (map)
 		for case, value in pairs(map) do
 			local matches = false
@@ -546,7 +712,7 @@ function switch(variable)
 	end
 end
 
-function try(f)
+function _G.try(f)
 	if type(f) == "table" then
 		f = f[1]
 	end
@@ -554,8 +720,8 @@ function try(f)
 	return TryCatchFinally(silent, result)
 end
 
-function default() end
-function null() end -- TODO: Delete?
+function _G.default() end
+function _G.null() end -- TODO: Delete?
 
 class 'TryCatchFinally' {
 
@@ -624,5 +790,5 @@ class 'Class' {
 		Type.delete(self)
 	end;
 }
-
+Class.getset_readonly_error = true
 Type.setBasePath("src")
