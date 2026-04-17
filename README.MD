@@ -17,11 +17,7 @@ Sometimes there is a need to use classes in language that does not support them 
 - [Testing](#testing)
 
 ## Basic usage
-Import `class.lua` in project or you can install it via [LuaRocks](https://luarocks.org/):
-```
-luarocks install lua-class
-```
-and use it like this:
+Import `class.lua` in project and use it like this:
 ```lua
 class "A" {
 
