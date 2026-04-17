@@ -102,6 +102,29 @@ class 'A' {}
 class 'B' extends 'A'
 class 'C' extends (B, A) {} -- Error is here because class A is already derived in B
 ```
+## Getters and Setters
+Getters and setters can be created using the following syntax:
+
+Option 1:
+```lua
+class 'A'{
+	getset("key", function(self)...end, function(self, value)...end)
+	getset("some_other_key", function(self)...end)
+}
+```
+
+Option 2:
+```lua
+class 'A'{ 
+	getset { 
+		["key"] = { getter = function(self) ... end, setter = function(self, value) ... end }
+		["some_other_key"] = {getter = function(self) ... end}
+	}
+}
+```
+Getters and setters will take priority over both the __index and __newindex(or [] operator) functions, even if defined before the metamethod operators.
+
+If a getset statement has a null setter, (ie, `getset("key", getter, nil)`) it will throw an error. Setting `Class.getset_readonly_error` to false will bypass this and call metamethods.
 
 ## Namespaces
 Namespaces can also be created by using `namespace` keyword (actually - function):
