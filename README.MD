@@ -5,6 +5,8 @@ Sometimes there is a need to use classes in language that does not support them 
 - [Basic usage](#basic-usage)
 - [Inheritance](#inheritance)
 - [Multiple inheritance](#multiple-inheritance)
+- [Getters and Setters](#getters-and-setters)
+- [Static Fields](#static-fields)
 - [Namespaces](#namespaces)
 - [Import](#import)
 - [Operator overloading](#operator-overloading)
@@ -125,6 +127,28 @@ class 'A'{
 Getters and setters will take priority over both the __index and __newindex(or [] operator) functions, even if defined before the metamethod operators.
 
 If a getset statement has a null setter, (ie, `getset("key", getter, nil)`) it will throw an error. Setting `Class.getset_readonly_error` to false will bypass this and call metamethods.
+
+
+## Static Fields
+Static fields can be defined in two ways:
+
+Option 1:
+```lua
+class 'A' {
+	static {
+		SomeKey = "SomeValue"
+	}
+}
+print(A.SomeKey) --> "SomeValue"
+```
+
+Option 2:
+```lua
+class 'A' {...}
+A.SomeKey = "SomeValue"
+print(A.SomeKey) --> "SomeValue"
+```
+
 
 ## Namespaces
 Namespaces can also be created by using `namespace` keyword (actually - function):
